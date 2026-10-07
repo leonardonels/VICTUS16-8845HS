@@ -1,0 +1,3 @@
+# Reapply the power limits when the barrel charger or a USB-C power source is plugged in or out:
+# the firmware resets them then, and victus16-power-apply picks the limits for the new source.
+SUBSYSTEM=="power_supply", ATTR{type}=="Mains|USB", ACTION=="change", RUN+="/usr/bin/systemctl --no-block restart victus16-power.service"

@@ -1,0 +1,43 @@
+#!/bin/bash
+# Applies the power limits in /etc/victus16/power-limits.conf with ryzenadj for the current power
+# source: the BARREL_* limits on the barrel charger, the OTHER_* limits on battery or USB-C.
+# Run by victus16-power.service at boot, after resume, and (through the udev rule) when a charger
+# is plugged in or out. Installed to /usr/local/sbin/victus16-power-apply.
+#
+#   victus16-power-apply [--wait SECONDS]   wait first, so the firmware's own change on a
+#                                           power-source switch is done before ours
+set -euo pipefail
+
+CONF=/etc/victus16/power-limits.conf
+RYZENADJ=/usr/local/bin/ryzenadj
+
+if [ "${1:-}" = "--wait" ]; then
+  sleep "${2:-3}"
+fi
+
+# Both chargers make the "Mains" supply online; a USB-C source also shows as an online "USB" supply.
+mains=0 usbc=0
+for s in /sys/class/power_supply/*; do
+  [ "$(cat "$s/online" 2>/dev/null)" = "1" ] || continue
+  case "$(cat "$s/type" 2>/dev/null)" in
+    Mains) mains=1 ;;
+    USB) usbc=1 ;;
+  esac
+done
+if [ "$mains" = 1 ] && [ "$usbc" = 0 ]; then source=barrel; else source=other; fi
+
+# shellcheck source=/dev/null
+. "$CONF"
+if [ "$source" = barrel ]; then
+  set -- "$BARREL_STAPM_LIMIT" "$BARREL_SLOW_LIMIT" "$BARREL_FAST_LIMIT" "$BARREL_TCTL_TEMP"
+  what="barrel charger"
+else
+  what=$([ "$usbc" = 1 ] && echo "USB-C power" || echo "battery")
+  if [ -z "${OTHER_STAPM_LIMIT:-}" ]; then
+    echo "$what: leaving the firmware's limits"
+    exit 0
+  fi
+  set -- "$OTHER_STAPM_LIMIT" "$OTHER_SLOW_LIMIT" "$OTHER_FAST_LIMIT" "$OTHER_TCTL_TEMP"
+fi
+"$RYZENADJ" --stapm-limit="$1" --slow-limit="$2" --fast-limit="$3" --tctl-temp="$4"
+echo "$what: STAPM $1 mW, PPT slow $2 mW, PPT fast $3 mW, Tctl $4 C"

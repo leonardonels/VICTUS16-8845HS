@@ -1,0 +1,12 @@
+# Applies the AC power limits (/etc/victus16/power-limits.conf) at boot and after every resume:
+# the firmware resets them on sleep.
+[Unit]
+Description=Victus 16 power limits (ryzenadj)
+After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/victus16-power-apply --wait 3
+
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
